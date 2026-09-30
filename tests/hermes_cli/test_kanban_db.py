@@ -469,6 +469,25 @@ def test_respawn_guard_defers_rate_limited_within_cooldown(
         assert kbd.check_respawn_guard(conn, tid) is None
 
 
+def test_respawn_guard_ignores_quota_stamp_after_successful_review_handoff(kanban_home):
+    with kbc.connect() as conn:
+        tid = kb.create_task(conn, title="review after quota", assignee="builder")
+        kb.claim_task(conn, tid)
+        run_id = kb.get_task(conn, tid).current_run_id
+        conn.execute(
+            "UPDATE task_runs SET outcome='review_requested', status='review', "
+            "ended_at=? WHERE id=?", (5_000_000, run_id),
+        )
+        conn.execute(
+            "UPDATE tasks SET status='review', current_run_id=NULL, "
+            "last_failure_error=? WHERE id=?",
+            ("pid 1 exited rate-limited (quota wall) — requeued", tid),
+        )
+        conn.commit()
+
+        assert kbd.check_respawn_guard(conn, tid, lane="review") is None
+
+
 @pytest.mark.parametrize(
     "error_text, expected",
     [

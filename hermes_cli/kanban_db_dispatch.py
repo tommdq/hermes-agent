@@ -1554,7 +1554,9 @@ def check_respawn_guard(
     # benign commands such as ``claude auth status`` (#117097).
     err = _kb._lossy_text(row["last_failure_error"])
     latest_outcome = latest_run["outcome"] if latest_run is not None else None
-    if err and latest_outcome != "crashed" and _RESPAWN_BLOCKER_RE.search(err):
+    # A later successful handoff supersedes a quota/auth failure from an earlier run.
+    superseded = latest_outcome in ("crashed", "review_requested", "changes_requested", "completed")
+    if err and not superseded and _RESPAWN_BLOCKER_RE.search(err):
         return "blocker_auth"
 
     # Review-lane spawns stop here: a recent completed run and a fresh PR URL
